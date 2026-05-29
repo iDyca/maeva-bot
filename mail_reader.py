@@ -16,10 +16,14 @@ class OutlookMailReader:
         """Retourne la liste des emails non lus contenant un lien de lead Maeva."""
         self._page.goto(self.OUTLOOK_URL)
         self._page.wait_for_load_state("networkidle")
-        self._page.wait_for_selector("div[role='list']", timeout=20_000)
+        # Attendre n'importe quel élément de la liste de mails
+        self._page.wait_for_selector(
+            "div[role='list'], div[role='listitem'], [data-convid]",
+            timeout=30_000
+        )
 
         emails_data = []
-        unread = self._page.locator("div[role='listitem'][data-convid]").all()
+        unread = self._page.locator("[data-convid]").all()
 
         for item in unread:
             aria = item.get_attribute("aria-label") or ""
