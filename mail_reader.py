@@ -1,8 +1,9 @@
 import re
 from playwright.sync_api import Page
 
+# Correspond aux deux formats d'URL Maeva
 LEAD_URL_PATTERN = re.compile(
-    r"https://renaultarca\.my\.site\.com/NestSFA/s/lead/[A-Za-z0-9]+/[^\s\"'>]+"
+    r"https://renaultarca\.my\.site\.com/NestSFA/[A-Za-z0-9/\-_]+"
 )
 
 
@@ -11,21 +12,28 @@ class OutlookMailReader:
 
     def __init__(self, page: Page):
         self._page = page
-        self._traites: set[str] = set()  # IDs déjà traités
+        self._traites: set[str] = set()
 
-    def get_unread_lead_emails(self) -> list[dict]:
+    def _naviguer_dossier_maeva(self) -> None:
         self._page.goto(self.OUTLOOK_URL)
         self._page.wait_for_load_state("networkidle")
+        dossier = self._page.get_by_role("treeitem", name=re.compile(r"Maeva", re.IGNORECASE)).first
+        dossier.wait_for(state="visible", timeout=15_000)
+        dossier.click()
+        self._page.wait_for_load_state("networkidle")
+
+    def get_unread_lead_emails(self) -> list[dict]:
+        self._naviguer_dossier_maeva()
 
         try:
             self._page.wait_for_selector("[data-convid]", timeout=30_000)
         except Exception:
-            print("[DEBUG] Boîte de réception non chargée")
+            print("[DEBUG] Dossier Maeva vide ou non chargé")
             return []
 
         emails_data = []
         items = self._page.locator("[data-convid]").all()
-        print(f"[DEBUG] {len(items)} email(s) visibles")
+        print(f"[DEBUG] {len(items)} email(s) dans Maeva")
 
         for item in items:
             conv_id = item.get_attribute("data-convid") or ""
