@@ -18,28 +18,29 @@ logging.basicConfig(
 log = logging.getLogger("maeva")
 
 POLLING_INTERVAL = int(os.getenv("POLLING_INTERVAL", "60"))
-SESSION_DIR = Path("sessions")
+
+# Chemin du profil Chrome de l'utilisateur (déjà connecté au CRM et Outlook)
+CHROME_PROFILE = os.getenv(
+    "CHROME_PROFILE",
+    str(Path.home() / "AppData/Local/Google/Chrome/User Data")
+)
 
 
 def main() -> None:
     log.info("Démarrage du bot MAEVA")
-    SESSION_DIR.mkdir(exist_ok=True)
+    log.info("Ferme Google Chrome complètement avant de continuer...")
+    input("Appuie sur Entrée quand Chrome est fermé...")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        # Utilise le profil Chrome existant (sessions déjà actives)
+        browser = p.chromium.launch_persistent_context(
+            user_data_dir=CHROME_PROFILE,
+            headless=False,
+            args=["--profile-directory=Default"],
+        )
 
-        # Contexte Outlook
-        outlook_context = browser.new_context()
-        outlook_page = outlook_context.new_page()
-
-        # Contexte CRM — réutilise la session sauvegardée si elle existe
-        crm_session = str(SESSION_DIR / "crm_session.json")
-        if Path(crm_session).exists():
-            crm_context = browser.new_context(storage_state=crm_session)
-        else:
-            crm_context = browser.new_context()
-
-        crm_page = crm_context.new_page()
+        outlook_page = browser.new_page()
+        crm_page = browser.new_page()
 
         reader = OutlookMailReader(
             email=os.environ["OUTLOOK_EMAIL"],
@@ -48,21 +49,12 @@ def main() -> None:
         )
         bot = MaevaBot(page=crm_page)
 
-        # Connexion Outlook
-        log.info("Connexion à Outlook...")
+        log.info("Vérification session Outlook...")
         reader.login()
 
-        # Connexion CRM — manuelle si pas de session sauvegardée
+        log.info("Chargement du CRM...")
         crm_page.goto(os.environ["CRM_URL"])
         crm_page.wait_for_load_state("networkidle")
-
-        if not Path(crm_session).exists():
-            log.info("=== CONNEXION CRM REQUISE ===")
-            log.info("Connecte-toi au CRM dans la fenêtre qui vient de s'ouvrir.")
-            log.info("Appuie sur Entrée ici une fois connecté...")
-            input()
-            crm_context.storage_state(path=crm_session)
-            log.info("Session CRM sauvegardée.")
 
         log.info("Bot prêt — polling toutes les %ds", POLLING_INTERVAL)
 
