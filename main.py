@@ -25,11 +25,9 @@ LOGIN_URL = "https://sso.renault.com/app/renault_irn54144_1/exk7slmj6lRFh2ZHg417
 
 
 def setup_sessions(p) -> None:
-    """Première connexion manuelle — sauvegarde les sessions Outlook et CRM."""
     log.info("=== PREMIÈRE CONNEXION — SETUP ===")
     browser = p.chromium.launch(headless=False)
 
-    # Session Outlook
     log.info("Étape 1/2 — Connexion Outlook")
     outlook_ctx = browser.new_context()
     outlook_page = outlook_ctx.new_page()
@@ -39,7 +37,6 @@ def setup_sessions(p) -> None:
     outlook_ctx.storage_state(path=str(OUTLOOK_SESSION))
     log.info("Session Outlook sauvegardée.")
 
-    # Session CRM
     log.info("Étape 2/2 — Connexion CRM")
     crm_ctx = browser.new_context()
     crm_page = crm_ctx.new_page()
@@ -58,12 +55,10 @@ def main() -> None:
     SESSION_DIR.mkdir(exist_ok=True)
 
     with sync_playwright() as p:
-        # Premier lancement : setup des sessions
         if not CRM_SESSION.exists() or not OUTLOOK_SESSION.exists():
             setup_sessions(p)
             return
 
-        # Lancement normal — invisible, sessions sauvegardées
         browser = p.chromium.launch(headless=True)
 
         outlook_ctx = browser.new_context(storage_state=str(OUTLOOK_SESSION))
@@ -72,11 +67,7 @@ def main() -> None:
         crm_ctx = browser.new_context(storage_state=str(CRM_SESSION))
         crm_page = crm_ctx.new_page()
 
-        reader = OutlookMailReader(
-            email=os.environ["OUTLOOK_EMAIL"],
-            password=os.environ["OUTLOOK_PASSWORD"],
-            page=outlook_page,
-        )
+        reader = OutlookMailReader(page=outlook_page)
         bot = MaevaBot(page=crm_page)
 
         log.info("Vérification session Outlook...")
