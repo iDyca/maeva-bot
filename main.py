@@ -21,7 +21,7 @@ POLLING_INTERVAL = int(os.getenv("POLLING_INTERVAL", "60"))
 SESSION_DIR = Path("sessions")
 CRM_SESSION = SESSION_DIR / "crm_session.json"
 OUTLOOK_SESSION = SESSION_DIR / "outlook_session.json"
-LOGIN_URL = "https://dcs.renault.com/rne_hpa2/home.jsp"
+LOGIN_URL = "https://sso.renault.com/app/renault_irn54144_1/exk7slmj6lRFh2ZHg417/sso/saml"
 
 
 def setup_sessions(p) -> None:
@@ -45,7 +45,7 @@ def setup_sessions(p) -> None:
     crm_page = crm_ctx.new_page()
     crm_page.goto(LOGIN_URL)
     crm_page.wait_for_load_state("networkidle")
-    input("Connecte-toi au CRM via dcs.renault.com, puis appuie sur Entrée ici...")
+    input("Connecte-toi au CRM avec ton token USB, puis appuie sur Entrée ici...")
     crm_ctx.storage_state(path=str(CRM_SESSION))
     log.info("Session CRM sauvegardée.")
 
