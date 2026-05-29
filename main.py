@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 
@@ -17,18 +18,28 @@ logging.basicConfig(
 log = logging.getLogger("maeva")
 
 POLLING_INTERVAL = int(os.getenv("POLLING_INTERVAL", "60"))
+SESSION_DIR = Path("sessions")
 
 
 def main() -> None:
     log.info("Démarrage du bot MAEVA")
+    SESSION_DIR.mkdir(exist_ok=True)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)  # headless=True en production
-        context = browser.new_context()
+        browser = p.chromium.launch(headless=False)
 
-        # Deux onglets : un pour Outlook, un pour le CRM
-        outlook_page = context.new_page()
-        crm_page = context.new_page()
+        # Contexte Outlook
+        outlook_context = browser.new_context()
+        outlook_page = outlook_context.new_page()
+
+        # Contexte CRM — réutilise la session sauvegardée si elle existe
+        crm_session = str(SESSION_DIR / "crm_session.json")
+        if Path(crm_session).exists():
+            crm_context = browser.new_context(storage_state=crm_session)
+        else:
+            crm_context = browser.new_context()
+
+        crm_page = crm_context.new_page()
 
         reader = OutlookMailReader(
             email=os.environ["OUTLOOK_EMAIL"],
@@ -37,11 +48,21 @@ def main() -> None:
         )
         bot = MaevaBot(page=crm_page)
 
+        # Connexion Outlook
         log.info("Connexion à Outlook...")
         reader.login()
 
-        log.info("Connexion au CRM Maeva...")
-        bot.login()
+        # Connexion CRM — manuelle si pas de session sauvegardée
+        crm_page.goto(os.environ["CRM_URL"])
+        crm_page.wait_for_load_state("networkidle")
+
+        if not Path(crm_session).exists():
+            log.info("=== CONNEXION CRM REQUISE ===")
+            log.info("Connecte-toi au CRM dans la fenêtre qui vient de s'ouvrir.")
+            log.info("Appuie sur Entrée ici une fois connecté...")
+            input()
+            crm_context.storage_state(path=crm_session)
+            log.info("Session CRM sauvegardée.")
 
         log.info("Bot prêt — polling toutes les %ds", POLLING_INTERVAL)
 
@@ -56,10 +77,9 @@ def main() -> None:
                             success = bot.traiter_lead(lead_url)
                             if success:
                                 log.info(f"✓ Lead traité : {lead_url}")
+                                reader.mark_as_read(email["element"])
                             else:
                                 log.warning(f"✗ Échec : {lead_url}")
-                        if any(bot.traiter_lead(u) for u in email["lead_urls"]):
-                            reader.mark_as_read(email["element"])
                 else:
                     log.debug("Aucun email avec lead")
             except Exception as exc:
