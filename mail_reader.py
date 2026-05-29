@@ -11,40 +11,25 @@ class OutlookMailReader:
 
     def __init__(self, page: Page):
         self._page = page
-
-    def _naviguer_dossier_maeva(self) -> None:
-        self._page.goto(self.OUTLOOK_URL)
-        self._page.wait_for_load_state("networkidle")
-        dossier = self._page.locator(
-            "div[role='treeitem']:has-text('Maeva'), "
-            "span:has-text('Maeva'), "
-            "a:has-text('Maeva')"
-        ).first
-        dossier.wait_for(state="visible", timeout=15_000)
-        dossier.click()
-        self._page.wait_for_load_state("networkidle")
+        self._traites: set[str] = set()  # IDs déjà traités
 
     def get_unread_lead_emails(self) -> list[dict]:
-        self._naviguer_dossier_maeva()
-        self._page.screenshot(path="debug_outlook.png")
+        self._page.goto(self.OUTLOOK_URL)
+        self._page.wait_for_load_state("networkidle")
 
         try:
-            self._page.wait_for_selector(
-                "div[role='list'], div[role='listitem'], [data-convid]",
-                timeout=30_000
-            )
+            self._page.wait_for_selector("[data-convid]", timeout=30_000)
         except Exception:
-            print("[DEBUG] Aucun élément de liste trouvé — screenshot sauvegardé dans debug_outlook.png")
+            print("[DEBUG] Boîte de réception non chargée")
             return []
 
         emails_data = []
-        unread = self._page.locator("[data-convid]").all()
-        print(f"[DEBUG] {len(unread)} email(s) dans le dossier Maeva")
+        items = self._page.locator("[data-convid]").all()
+        print(f"[DEBUG] {len(items)} email(s) visibles")
 
-        for item in unread:
-            aria = item.get_attribute("aria-label") or ""
-            print(f"[DEBUG] Email aria-label: {aria[:100]}")
-            if "Non lu" not in aria and "Unread" not in aria:
+        for item in items:
+            conv_id = item.get_attribute("data-convid") or ""
+            if conv_id in self._traites:
                 continue
 
             item.click()
@@ -52,10 +37,9 @@ class OutlookMailReader:
 
             body = self._page.locator("div[role='main']").inner_text()
             lead_urls = LEAD_URL_PATTERN.findall(body)
-            print(f"[DEBUG] Lead URLs trouvées: {lead_urls}")
 
             if lead_urls:
-                conv_id = item.get_attribute("data-convid")
+                print(f"[DEBUG] Lead trouvé : {lead_urls}")
                 emails_data.append({
                     "conv_id": conv_id,
                     "lead_urls": list(set(lead_urls)),
@@ -64,9 +48,12 @@ class OutlookMailReader:
 
         return emails_data
 
-    def mark_as_read(self, item_element) -> None:
+    def mark_as_read(self, conv_id: str, item_element) -> None:
+        self._traites.add(conv_id)
         try:
             item_element.click(button="right")
-            self._page.locator("span:has-text('Marquer comme lu'), span:has-text('Mark as read')").first.click()
+            self._page.locator(
+                "span:has-text('Marquer comme lu'), span:has-text('Mark as read')"
+            ).first.click()
         except Exception:
             pass

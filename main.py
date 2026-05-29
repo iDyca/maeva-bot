@@ -91,7 +91,7 @@ def main() -> None:
                             success = bot.traiter_lead(lead_url)
                             if success:
                                 log.info(f"✓ Lead traité : {lead_url}")
-                                reader.mark_as_read(email["element"])
+                                reader.mark_as_read(email["conv_id"], email["element"])
                             else:
                                 log.warning(f"✗ Échec : {lead_url}")
                 else:
